@@ -1,3 +1,6 @@
+## Fork Notes
+* Support original parameterisation as in [Quad lights(Original)](https://blog.selfshadow.com/sandbox/ltc.html) for comparison.
+
 ## Overview
 This repository contains an (evolving) reference implementation for the following publications:
 * [Real-Time Polygonal-Light Shading with Linearly Transformed Cosines](https://eheitzresearch.wordpress.com/415-2/) (2016)

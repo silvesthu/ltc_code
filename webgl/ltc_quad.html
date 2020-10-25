@@ -63,6 +63,7 @@
 <script src="js/jquery-ui-1.8.13.custom.min.js" type="text/javascript"></script>
 
 <script src="../fit/results/ltc.js" type="text/javascript"></script>
+<script src="../fit/results/ltc_tables.js" type="text/javascript"></script>
 
 
 <script>
@@ -186,6 +187,9 @@ var controller = null;
 
 var ltc_texture_1 = null;
 var ltc_texture_2 = null;
+
+var ltc_texture_mat = null;
+var ltc_texture_mag = null;
 
 var rttFramebuffer = null;
 var rttTexture = null;
@@ -329,6 +333,16 @@ function init() {
     ltc_texture_2 = gl.createTexture();
     gl.bindTexture(gl.TEXTURE_2D, ltc_texture_2);
     gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA32F, 64, 64, 0, gl.RGBA, gl.FLOAT, new Float32Array(g_ltc_2));
+    SetClampedTextureState();
+
+    ltc_texture_mat = gl.createTexture();
+    gl.bindTexture(gl.TEXTURE_2D, ltc_texture_mat);
+    gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA32F, 64, 64, 0, gl.RGBA, gl.FLOAT, new Float32Array(g_ltc_mat));
+    SetClampedTextureState();
+
+    ltc_texture_mag = gl.createTexture();
+    gl.bindTexture(gl.TEXTURE_2D, ltc_texture_mag);
+    gl.texImage2D(gl.TEXTURE_2D, 0, gl.R32F, 64, 64, 0, gl.RED, gl.FLOAT, new Float32Array(g_ltc_mag));
     SetClampedTextureState();
 
     // Fetch media and kick off the main program once everything has loaded
@@ -652,6 +666,14 @@ function draw() {
     gl.activeTexture(gl.TEXTURE1);
     gl.bindTexture(gl.TEXTURE_2D, ltc_texture_2);
     gl.uniform1i(gl.getUniformLocation(currentProgram, "ltc_2"), 1);
+
+    gl.activeTexture(gl.TEXTURE2);
+    gl.bindTexture(gl.TEXTURE_2D, ltc_texture_mat);
+    gl.uniform1i(gl.getUniformLocation(currentProgram, "ltc_mat"), 2);
+
+    gl.activeTexture(gl.TEXTURE3);
+    gl.bindTexture(gl.TEXTURE_2D, ltc_texture_mag);
+    gl.uniform1i(gl.getUniformLocation(currentProgram, "ltc_mag"), 3);
 
     checkGLError();
 

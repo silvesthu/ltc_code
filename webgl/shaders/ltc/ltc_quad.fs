@@ -1,13 +1,26 @@
-// bind roughness   {label:"Roughness", default:0.25, min:0.01, max:1, step:0.001}
-// bind dcolor      {label:"Diffuse Color",  r:1.0, g:1.0, b:1.0}
-// bind scolor      {label:"Specular Color", r:0.23, g:0.23, b:0.23}
-// bind intensity   {label:"Light Intensity", default:4, min:0, max:10}
-// bind width       {label:"Width",  default: 8, min:0.1, max:15, step:0.1}
-// bind height      {label:"Height", default: 8, min:0.1, max:15, step:0.1}
-// bind roty        {label:"Rotation Y", default: 0, min:0, max:1, step:0.001}
-// bind rotz        {label:"Rotation Z", default: 0, min:0, max:1, step:0.001}
-// bind twoSided    {label:"Two-sided", default:false}
-// bind clipless    {label:"Clipless Approximation", default:false}
+// bind originalParameterisation    {label:"Use Original Parameterisation", default:false}
+// bind roughness                   {label:"Roughness", default:0.25, min:0.01, max:1, step:0.001}
+// bind dcolor                      {label:"Diffuse Color",  r:1.0, g:1.0, b:1.0}
+// bind scolor                      {label:"Specular Color", r:1.0, g:1.0, b:1.0}
+// bind intensity                   {label:"Light Intensity", default:4, min:0, max:1000}
+// bind width                       {label:"Width",  default: 8, min:0.1, max:15, step:0.1}
+// bind height                      {label:"Height", default: 8, min:0.1, max:15, step:0.1}
+// bind rectAtOrigin                {label:"Rect at origin", default:false}
+// bind posx                        {label:"Light Offset X", default: 0, min:-50, max:50, step:0.1}
+// bind posy                        {label:"Light Offset Y", default: 0, min:-50, max:50, step:0.1}
+// bind posz                        {label:"Light Offset Z", default: 0, min:-50, max:50, step:0.1}
+// bind roty                        {label:"Light Rotation Y", default: 0, min:0, max:1, step:0.001}
+// bind rotz                        {label:"Light Rotation Z", default: 0, min:0, max:1, step:0.001}
+// bind twoSided                    {label:"Two-sided", default:false}
+// bind clipless                    {label:"Clipless Approximation", default:false}
+// bind planeShowNormal             {label:"Plane Show normal", default:false}
+// bind planeOffsetY                {label:"Plane Offset Y", default: 0, min:-50, max:50, step:0.1}
+// bind planeHide                   {label:"Plane Hide", default:false}
+// bind planeFlipBackfaceNormal     {label:"Plane Flip Backface Normal", default:false}
+
+// Checked: https://blog.selfshadow.com/sandbox/ltc.html
+// Unchecked: https://blog.selfshadow.com/ltc/webgl/ltc_quad.html
+uniform bool originalParameterisation;
 
 uniform float roughness;
 uniform vec3  dcolor;
@@ -16,14 +29,28 @@ uniform vec3  scolor;
 uniform float intensity;
 uniform float width;
 uniform float height;
+uniform bool rectAtOrigin;
+uniform float posx;
+uniform float posy;
+uniform float posz;
 uniform float roty;
 uniform float rotz;
 
 uniform bool twoSided;
 uniform bool clipless;
 
+uniform bool planeShowNormal;
+uniform bool planeFlipBackfaceNormal;
+uniform bool planeHide;
+uniform float planeOffsetY;
+
+// New LUT
 uniform sampler2D ltc_1;
 uniform sampler2D ltc_2;
+
+// Original LUT
+uniform sampler2D ltc_mat;
+uniform sampler2D ltc_mag;
 
 uniform mat4  view;
 uniform vec2  resolution;
@@ -156,6 +183,15 @@ vec3 IntegrateEdgeVec(vec3 v1, vec3 v2)
 
 float IntegrateEdge(vec3 v1, vec3 v2)
 {
+    if (originalParameterisation)
+    {
+        float cosTheta = dot(v1, v2);
+        float theta = acos(cosTheta);    
+        float res = cross(v1, v2).z * ((theta > 0.001) ? theta/sin(theta) : 1.0);
+
+        return res;
+    }
+
     return IntegrateEdgeVec(v1, v2).z;
 }
 
@@ -365,7 +401,12 @@ void InitRect(out Rect rect)
     rect.dirx = rotation_yz(vec3(1, 0, 0), roty*2.0*pi, rotz*2.0*pi);
     rect.diry = rotation_yz(vec3(0, 1, 0), roty*2.0*pi, rotz*2.0*pi);
 
-    rect.center = vec3(0, 6, 32);
+    if (rectAtOrigin)
+        rect.center = vec3(0.0, 0.0, 0.0);
+    else
+        rect.center = vec3(0.0, 6.0, 32.0);
+    rect.center += vec3(posx, posy, posz);
+
     rect.halfx  = 0.5*width;
     rect.halfy  = 0.5*height;
 
@@ -410,7 +451,7 @@ void main()
     vec3 points[4];
     InitRectPoints(rect, points);
 
-    vec4 floorPlane = vec4(0, 1, 0, 0);
+    vec4 floorPlane = vec4(0, 1, 0, 0.0 + planeOffsetY);
 
     vec3 lcol = vec3(intensity);
     vec3 dcol = ToLinear(dcolor);
@@ -422,6 +463,10 @@ void main()
 
     float distToFloor;
     bool hitFloor = RayPlaneIntersect(ray, floorPlane, distToFloor);
+
+    if (planeHide)
+        hitFloor = false;
+
     if (hitFloor)
     {
         vec3 pos = ray.origin + ray.dir*distToFloor;
@@ -429,8 +474,18 @@ void main()
         vec3 N = floorPlane.xyz;
         vec3 V = -ray.dir;
 
+        if (planeFlipBackfaceNormal && dot(ray.dir, N) > 0.0)
+            N = -N;
+
         float ndotv = saturate(dot(N, V));
         vec2 uv = vec2(roughness, sqrt(1.0 - ndotv));
+
+        if (originalParameterisation)
+        {
+            float theta = acos(dot(N, V));
+            uv = vec2(roughness, theta/(0.5*pi));
+        }
+
         uv = uv*LUT_SCALE + LUT_BIAS;
 
         vec4 t1 = texture(ltc_1, uv);
@@ -442,13 +497,40 @@ void main()
             vec3(t1.z, 0, t1.w)
         );
 
+        if (originalParameterisation)
+        {
+            vec4 t = texture(ltc_mat, uv);
+
+            Minv = mat3(
+                vec3(  1,   0, t.y),
+                vec3(  0, t.z,   0),
+                vec3(t.w,   0, t.x)
+            );
+        }
+
         vec3 spec = LTC_Evaluate(N, V, pos, Minv, points, twoSided);
-        // BRDF shadowing and Fresnel
-        spec *= scol*t2.x + (1.0 - scol)*t2.y;
+
+        if (originalParameterisation)
+        {
+            spec *= scol*texture(ltc_mag, uv).x;
+        }
+        else
+        {
+            // BRDF shadowing and Fresnel
+            spec *= scol*t2.x + (1.0 - scol)*t2.y;
+        }
 
         vec3 diff = LTC_Evaluate(N, V, pos, mat3(1), points, twoSided);
 
         col = lcol*(spec + dcol*diff);
+
+        if (originalParameterisation)
+        {
+            col /= 2.0*pi;
+        }
+
+        if (planeShowNormal)
+            col = N * 0.5 + 0.5;
     }
 
     float distToRect;
