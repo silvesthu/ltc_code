@@ -13,10 +13,12 @@
 // bind rotz                        {label:"Light Rotation Z", default: 0, min:0, max:1, step:0.001}
 // bind twoSided                    {label:"Two-sided", default:false}
 // bind clipless                    {label:"Clipless Approximation", default:false}
+// bind planeAxis                   {label:"Plane Axis (x=0 y=1 z=2)", default: 1, min:0, max:2, step:1}
 // bind planeShowNormal             {label:"Plane Show normal", default:false}
-// bind planeOffsetY                {label:"Plane Offset Y", default: 0, min:-50, max:50, step:0.1}
+// bind planeOffset                 {label:"Plane Offset", default: 0, min:-50, max:50, step:0.1}
 // bind planeHide                   {label:"Plane Hide", default:false}
-// bind planeFlipBackfaceNormal     {label:"Plane Flip Backface Normal", default:false}
+// bind planeFlipBackfaceNormal     {label:"Plane Flip Backface Normal", default:true}
+// bind planeClipLight              {label:"Plane Clip Light", default:false}
 
 // Checked: https://blog.selfshadow.com/sandbox/ltc.html
 // Unchecked: https://blog.selfshadow.com/ltc/webgl/ltc_quad.html
@@ -39,10 +41,13 @@ uniform float rotz;
 uniform bool twoSided;
 uniform bool clipless;
 
+uniform float planeAxis;
 uniform bool planeShowNormal;
 uniform bool planeFlipBackfaceNormal;
 uniform bool planeHide;
-uniform float planeOffsetY;
+uniform float planeOffset;
+
+uniform bool planeClipLight;
 
 // New LUT
 uniform sampler2D ltc_1;
@@ -451,7 +456,14 @@ void main()
     vec3 points[4];
     InitRectPoints(rect, points);
 
-    vec4 floorPlane = vec4(0, 1, 0, 0.0 + planeOffsetY);
+    vec4 floorPlane = vec4(0, 1, 0, 0.0 + planeOffset);
+
+    if (planeAxis == 0.0)
+        floorPlane.xyz = vec3(1, 0, 0);
+    if (planeAxis == 1.0)
+        floorPlane.xyz = vec3(0, 1, 0);
+    if (planeAxis == 2.0)
+        floorPlane.xyz = vec3(0, 0, 1);
 
     vec3 lcol = vec3(intensity);
     vec3 dcol = ToLinear(dcolor);
@@ -475,7 +487,10 @@ void main()
         vec3 V = -ray.dir;
 
         if (planeFlipBackfaceNormal && dot(ray.dir, N) > 0.0)
+        {
             N = -N;
+            floorPlane = -floorPlane;
+        }
 
         float ndotv = saturate(dot(N, V));
         vec2 uv = vec2(roughness, sqrt(1.0 - ndotv));
@@ -506,6 +521,23 @@ void main()
                 vec3(  0, t.z,   0),
                 vec3(t.w,   0, t.x)
             );
+        }
+
+        if (planeClipLight)
+        {
+            for (int i = 0; i < 4; i++)
+            {
+                // Clip light against axis-aligned plane
+                
+                // Note: Non-axis-aligned plane may slice rect into pentagon
+                // where complicated handling like those in ClipQuadToHorizon is required
+
+                vec4 point = vec4(points[i], 1.0);
+                vec4 planeEquation = vec4(N, floorPlane.w);
+                float d = dot(point, planeEquation);
+                if (d < 0.0) // behind plane, clip it
+                   points[i] -= d * N;
+            }
         }
 
         vec3 spec = LTC_Evaluate(N, V, pos, Minv, points, twoSided);
